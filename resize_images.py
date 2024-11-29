@@ -13,6 +13,7 @@ def process_image(input_path, output_path, max_size=1350):
     try:
         with Image.open(input_path) as img:
             icc_profile = img.info.get('icc_profile')
+            exif = img.info.get('exif')
             
             if img.mode in ('RGBA', 'P'):
                 img = img.convert('RGB')
