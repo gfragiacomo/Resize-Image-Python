@@ -1,100 +1,71 @@
-import torch
-import torchvision.transforms as transforms
+from PIL import Image
 import os
 import tkinter as tk
 from tkinter import filedialog
 from concurrent.futures import ThreadPoolExecutor
-from PIL import Image
-from torch.utils.data import Dataset, DataLoader
 
-class ImageFolder(Dataset):
-   def __init__(self, input_dir, max_size=1920):
-       self.image_paths = []
-       self.output_paths = []
-       self.icc_profiles = []
-       self.max_size = max_size
-       self._scan_dir(input_dir)
-       
-   def _scan_dir(self, input_dir):
-       for root, _, files in os.walk(input_dir):
-           for f in files:
-               if f.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.bmp')):
-                   self.image_paths.append(os.path.join(root, f))
-                   
-   def __len__(self):
-       return len(self.image_paths)
-       
-   def __getitem__(self, idx):
-       img_path = self.image_paths[idx]
-       with Image.open(img_path) as img:
-           icc_profile = img.info.get('icc_profile')
-           if img.mode in ('RGBA', 'P'):
-               img = img.convert('RGB')
-           return transforms.ToTensor()(img), icc_profile, img_path
+def select_folder(title):
+    root = tk.Tk()
+    root.withdraw()
+    return filedialog.askdirectory(title=title)
 
-def process_batch(batch, device, max_size=1920):
-   images, icc_profiles, paths = batch
-   images = images.to(device)
-   
-   batch_size, _, h, w = images.shape
-   ratio = max_size / max(h, w)
-   
-   if ratio < 1:
-       new_h = int(h * ratio)
-       new_w = int(w * ratio)
-       resize = transforms.Resize((new_h, new_w), antialias=True)
-       images = resize(images)
-   
-   return images.cpu(), icc_profiles, paths
-
-def save_images(images, icc_profiles, input_paths, output_dir):
-   to_pil = transforms.ToPILImage()
-   for img, icc, in_path in zip(images, icc_profiles, input_paths):
-       rel_path = os.path.relpath(os.path.dirname(in_path), os.path.dirname(in_path))
-       output_subdir = os.path.join(output_dir, rel_path)
-       os.makedirs(output_subdir, exist_ok=True)
-       
-       output_path = os.path.join(
-           output_subdir, 
-           os.path.splitext(os.path.basename(in_path))[0] + '.jpg'
-       )
-       
-       img_pil = to_pil(img)
-       if icc:
-           img_pil.save(output_path, 'JPEG', quality=60, optimize=True, icc_profile=icc)
-       else:
-           img_pil.save(output_path, 'JPEG', quality=60, optimize=True)
+def process_image(input_path, output_path, max_size=1350):
+    try:
+        with Image.open(input_path) as img:
+            icc_profile = img.info.get('icc_profile')
+            
+            if img.mode in ('RGBA', 'P'):
+                img = img.convert('RGB')
+            
+            ratio = max_size / max(img.size)
+            if ratio < 1:
+                new_size = tuple(int(dim * ratio) for dim in img.size)
+                img = img.resize(new_size, Image.Resampling.LANCZOS)
+            
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            
+            if icc_profile:
+                img.save(output_path, 'JPEG', quality=75, optimize=True, icc_profile=icc_profile)
+            else:
+                img.save(output_path, 'JPEG', quality=75, optimize=True)
+            
+            return "processed"
+    except Exception as e:
+        print(f"Error processing {input_path}: {e}")
+        return "error"
 
 def main():
-   device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-   print(f"Using: {device}")
-   
-   root = tk.Tk()
-   root.withdraw()
-   input_dir = filedialog.askdirectory(title="Select Input Folder")
-   if not input_dir:
-       return
-       
-   output_dir = filedialog.askdirectory(title="Select Output Folder")
-   if not output_dir:
-       return
+    input_dir = select_folder("Select Input Folder")
+    if not input_dir:
+        return
+        
+    output_dir = select_folder("Select Output Folder")
+    if not output_dir:
+        return
+    
+    tasks = []
+    for root, _, files in os.walk(input_dir):
+        for filename in files:
+            if filename.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.bmp')):
+                input_path = os.path.join(root, filename)
+                rel_path = os.path.relpath(root, input_dir)
+                output_subdir = os.path.join(output_dir, rel_path)
+                output_filename = os.path.splitext(filename)[0] + '.jpg'
+                output_path = os.path.join(output_subdir, output_filename)
+                tasks.append((input_path, output_path))
 
-   dataset = ImageFolder(input_dir)
-   dataloader = DataLoader(
-       dataset, 
-       batch_size=4,
-       num_workers=os.cpu_count(),
-       pin_memory=True if torch.cuda.is_available() else False
-   )
-   
-   processed = 0
-   for batch in dataloader:
-       processed_images, profiles, paths = process_batch(batch, device)
-       save_images(processed_images, profiles, paths, output_dir)
-       processed += len(paths)
-       print(f"Processed: {processed}")
-   
-   print("Complete!")
+    processed = 0
+    errors = 0
+    
+    with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
+        for result in executor.map(lambda x: process_image(*x), tasks):
+            if result == "processed":
+                processed += 1
+                print(f"Processed: {processed}")
+            else:
+                errors += 1
+
+    print(f"\nComplete! Processed: {processed}, Errors: {errors}")
 
 if __name__ == "__main__":
-   main()
+    main()
