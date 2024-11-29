@@ -61,9 +61,9 @@ def save_images(images, icc_profiles, input_paths, output_dir):
        
        img_pil = to_pil(img)
        if icc:
-           img_pil.save(output_path, 'JPEG', quality=40, optimize=True, icc_profile=icc)
+           img_pil.save(output_path, 'JPEG', quality=60, optimize=True, icc_profile=icc)
        else:
-           img_pil.save(output_path, 'JPEG', quality=40, optimize=True)
+           img_pil.save(output_path, 'JPEG', quality=60, optimize=True)
 
 def main():
    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
