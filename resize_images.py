@@ -25,9 +25,9 @@ def process_image(input_path, output_path, max_size=1350):
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
             
             if icc_profile:
-                img.save(output_path, 'JPEG', quality=75, optimize=True, icc_profile=icc_profile)
+                img.save(output_path, 'JPEG', quality=90, optimize=True, icc_profile=icc_profile)
             else:
-                img.save(output_path, 'JPEG', quality=75, optimize=True)
+                img.save(output_path, 'JPEG', quality=90, optimize=True)
             
             return "processed"
     except Exception as e:
