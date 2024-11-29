@@ -45,6 +45,9 @@ def resize_images(input_dir, output_dir, max_size=1920):
                 
                 try:
                     with Image.open(input_path) as img:
+                        # Store the ICC profile
+                        icc_profile = img.info.get('icc_profile')
+                        
                         # Convert image to RGB if it's not
                         if img.mode in ('RGBA', 'P'):
                             img = img.convert('RGB')
@@ -55,8 +58,13 @@ def resize_images(input_dir, output_dir, max_size=1920):
                             new_size = tuple(int(dim * ratio) for dim in img.size)
                             img = img.resize(new_size, Image.Resampling.LANCZOS)
                         
-                        # Save the resized image with 40% quality
-                        img.save(output_path, 'JPEG', quality=40, optimize=True)
+                        # Save the resized image with 40% quality and original ICC profile
+                        if icc_profile:
+                            img.save(output_path, 'JPEG', quality=40, optimize=True, 
+                                   icc_profile=icc_profile)
+                        else:
+                            img.save(output_path, 'JPEG', quality=40, optimize=True)
+                            
                         processed += 1
                         print(f"Processed ({processed}): {input_path} -> {output_path}")
                 except Exception as e:
@@ -69,7 +77,7 @@ def main():
     print("Image Batch Resizer")
     print("==================")
     print("This script will resize images to have a longest edge of 1920 pixels")
-    print("and save them as JPG files with 40% quality.")
+    print("and save them as JPG files with 40% quality while preserving color profiles.")
     print("==================\n")
     
     # Select input folder
