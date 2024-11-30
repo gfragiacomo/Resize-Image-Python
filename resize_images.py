@@ -1,22 +1,42 @@
 from PIL import Image
+from io import BytesIO
 import os
 import tkinter as tk
 from tkinter import filedialog
 from concurrent.futures import ThreadPoolExecutor
+from PIL import ImageCms
+from PIL.ImageCms import Intent
 
 def select_folder(title):
     root = tk.Tk()
     root.withdraw()
     return filedialog.askdirectory(title=title)
 
+def convert_to_srgb(img):
+    try:
+        if 'icc_profile' in img.info:
+            input_profile = ImageCms.ImageCmsProfile(BytesIO(img.info['icc_profile']))
+            output_profile = ImageCms.createProfile('sRGB')
+            transform = ImageCms.buildTransformFromOpenProfiles(
+                input_profile, output_profile, 
+                img.mode, img.mode, 
+                renderingIntent=Intent.RELATIVE_COLORIMETRIC
+            )
+            img = ImageCms.applyTransform(img, transform)
+    except Exception as e:
+        print(f"Color profile conversion warning: {e}")
+    return img
+
 def process_image(input_path, output_path, max_size=1350):
     try:
         with Image.open(input_path) as img:
-            icc_profile = img.info.get('icc_profile')
             exif = img.info.get('exif')
             
             if img.mode in ('RGBA', 'P'):
                 img = img.convert('RGB')
+            
+            # Convert color profile to sRGB
+            img = convert_to_srgb(img)
             
             ratio = max_size / max(img.size)
             if ratio < 1:
@@ -25,15 +45,20 @@ def process_image(input_path, output_path, max_size=1350):
             
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
             
-            if icc_profile:
-                img.save(output_path, 'JPEG', quality=90, optimize=True, icc_profile=icc_profile)
-            else:
-                img.save(output_path, 'JPEG', quality=90, optimize=True)
-            
+            save_args = {
+                'quality': 75, 
+                'optimize': True
+            }
+            if exif:
+                save_args['exif'] = exif
+                
+            img.save(output_path, 'JPEG', **save_args)
             return "processed"
+            
     except Exception as e:
         print(f"Error processing {input_path}: {e}")
         return "error"
+
 
 def main():
     input_dir = select_folder("Select Input Folder")
