@@ -46,7 +46,7 @@ def process_image(input_path, output_path, max_size=1350):
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
             
             save_args = {
-                'quality': 75, 
+                'quality': 85, 
                 'optimize': True
             }
             if exif:
